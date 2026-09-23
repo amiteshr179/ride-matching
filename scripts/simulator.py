@@ -68,6 +68,24 @@ class Driver:
         self.ignored = set()
         self.offline_until = 0.0
 
+    def resume(self, stats):
+        """Like a driver app on restart: ask the server if we were on a trip and carry on."""
+        base = self.args.base_url
+        status, trip = call(base, "GET", f"/api/drivers/{self.id}/trip")
+        if status != 200:
+            return
+        self.trip = {"id": trip["id"],
+                     "pickup": (trip["pickupLat"], trip["pickupLng"]),
+                     "dropoff": (trip["dropoffLat"], trip["dropoffLng"])}
+        if trip["status"] == "MATCHED":
+            call(base, "POST", f"/api/trips/{trip['id']}/arriving", {"driverId": self.id})
+        if trip["status"] == "IN_PROGRESS":
+            self.pos = self.trip["pickup"]
+            self.state = "TO_DROPOFF"
+        else:
+            self.state = "TO_PICKUP"
+        stats.bump("trips_resumed")
+
     def tick(self, step_km, stats):
         base = self.args.base_url
         now = time.time()
@@ -204,6 +222,7 @@ def main():
     stats = Stats()
     pool = ThreadPoolExecutor(max_workers=16)
     step_km = args.speed_kmh / 3600.0 * args.tick
+    list(pool.map(lambda d: d.resume(stats), drivers))
 
     print(f"Simulating {len(drivers)} drivers; a ride every {args.ride_every}s. Open {args.base_url}/ for the map.")
     started = time.time()

@@ -7,7 +7,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Clock;
+import java.util.EnumSet;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -35,6 +37,13 @@ public class TripService {
     @Transactional(readOnly = true)
     public Trip get(UUID id) {
         return trips.findById(id).orElseThrow(() -> new TripNotFoundException(id));
+    }
+
+    /** The trip a driver is currently working on, if any. Lets a restarted driver app pick up where it left off. */
+    @Transactional(readOnly = true)
+    public Optional<Trip> activeTripFor(String driverId) {
+        return trips.findFirstByDriverIdAndStatusIn(driverId,
+                EnumSet.of(TripStatus.MATCHED, TripStatus.DRIVER_ARRIVING, TripStatus.IN_PROGRESS));
     }
 
     @Transactional

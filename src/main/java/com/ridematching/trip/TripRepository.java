@@ -34,6 +34,8 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
 
     List<Trip> findByStatusIn(Collection<TripStatus> statuses);
 
+    Optional<Trip> findFirstByDriverIdAndStatusIn(String driverId, Collection<TripStatus> statuses);
+
     List<Trip> findTop15ByStatusInOrderByRequestedAtDesc(Collection<TripStatus> statuses);
 
     @Query("select t.status as status, count(t) as total from Trip t group by t.status")

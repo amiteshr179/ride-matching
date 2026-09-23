@@ -56,6 +56,13 @@ public class TripController {
         return TripView.of(trips.get(id));
     }
 
+    @GetMapping("/api/drivers/{driverId}/trip")
+    public ResponseEntity<TripView> activeTrip(@PathVariable String driverId) {
+        return trips.activeTripFor(driverId)
+                .map(t -> ResponseEntity.ok(TripView.of(t)))
+                .orElseGet(() -> ResponseEntity.noContent().build());
+    }
+
     @PostMapping("/api/trips/{id}/arriving")
     public TripView arriving(@PathVariable UUID id, @Valid @RequestBody DriverAction body) {
         return TripView.of(trips.markArriving(id, body.driverId()));

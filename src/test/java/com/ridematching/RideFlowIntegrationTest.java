@@ -102,6 +102,7 @@ class RideFlowIntegrationTest {
         assertThat(accepted.status()).isEqualTo(200);
         assertThat(accepted.body().get("status").asString()).isEqualTo("MATCHED");
         assertThat(redis.opsForValue().get("driver:far:assignment")).isEqualTo("ASSIGNED:" + tripId);
+        assertThat(get("/api/drivers/far/trip").body().get("id").asString()).isEqualTo(tripId);
 
         // Out-of-order action is refused.
         assertThat(post("/api/trips/" + tripId + "/complete", "{\"driverId\":\"far\"}").status()).isEqualTo(409);
@@ -113,6 +114,7 @@ class RideFlowIntegrationTest {
         }
         assertThat(get("/api/trips/" + tripId).body().get("status").asString()).isEqualTo("COMPLETED");
         assertThat(redis.hasKey("driver:far:assignment")).isFalse();
+        assertThat(get("/api/drivers/far/trip").status()).isEqualTo(204);
 
         // Billing only hears about the trip through Kafka.
         await().atMost(Duration.ofSeconds(20)).untilAsserted(() ->
