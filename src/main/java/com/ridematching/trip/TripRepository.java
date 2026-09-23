@@ -33,4 +33,15 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     List<UUID> findTripIdsDueForMatching(@Param("now") Instant now, @Param("limit") int limit);
 
     List<Trip> findByStatusIn(Collection<TripStatus> statuses);
+
+    List<Trip> findTop15ByStatusInOrderByRequestedAtDesc(Collection<TripStatus> statuses);
+
+    @Query("select t.status as status, count(t) as total from Trip t group by t.status")
+    List<StatusCount> countByStatus();
+
+    interface StatusCount {
+        TripStatus getStatus();
+
+        long getTotal();
+    }
 }

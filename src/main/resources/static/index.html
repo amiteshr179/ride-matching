@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Ride matching - live map</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+          integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <style>
+    body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
+    #map { flex: 1; }
+    #side { width: 320px; padding: 12px; overflow-y: auto; border-left: 1px solid #ddd; font-size: 13px; }
+    h2 { font-size: 15px; margin: 12px 0 6px; }
+    table { border-collapse: collapse; width: 100%; }
+    td { padding: 2px 4px; }
+    .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; }
+    #log div { padding: 2px 0; border-bottom: 1px solid #f0f0f0; }
+    .muted { color: #777; }
+  </style>
+</head>
+<body>
+<div id="map"></div>
+<div id="side">
+  <h2>Drivers</h2>
+  <div><span class="dot" style="background:#2e9e44"></span>Available <b id="c-AVAILABLE">0</b></div>
+  <div><span class="dot" style="background:#f39c12"></span>Offer pending <b id="c-OFFERED">0</b></div>
+  <div><span class="dot" style="background:#2c6fd1"></span>On a trip <b id="c-ASSIGNED">0</b></div>
+
+  <h2>Trips (all time)</h2>
+  <table id="counts"></table>
+
+  <h2>Legend</h2>
+  <div><span class="dot" style="background:#d63031"></span>Rider waiting for a match</div>
+  <div class="muted">Dashed line: driver heading to pickup. Solid line: ride in progress.</div>
+
+  <h2>Recent changes</h2>
+  <div id="log"></div>
+</div>
+
+<script>
+  const HYDERABAD = [17.385, 78.4867];
+  const map = L.map('map').setView(HYDERABAD, 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap contributors'
+  }).addTo(map);
+
+  const COLORS = { AVAILABLE: '#2e9e44', OFFERED: '#f39c12', ASSIGNED: '#2c6fd1' };
+  const driverMarkers = new Map();
+  const tripLayer = L.layerGroup().addTo(map);
+  const lastStatus = new Map();
+
+  function text(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d;
+  }
+
+  function logLine(msg) {
+    const log = document.getElementById('log');
+    const line = text(new Date().toLocaleTimeString() + '  ' + msg);
+    log.prepend(line);
+    while (log.children.length > 40) log.removeChild(log.lastChild);
+  }
+
+  function renderDrivers(drivers) {
+    const seen = new Set();
+    const counts = { AVAILABLE: 0, OFFERED: 0, ASSIGNED: 0 };
+    for (const d of drivers) {
+      seen.add(d.id);
+      counts[d.state] = (counts[d.state] || 0) + 1;
+      let m = driverMarkers.get(d.id);
+      if (!m) {
+        m = L.circleMarker([d.lat, d.lng], { radius: 6, weight: 1, color: '#333', fillOpacity: 0.9 }).addTo(map);
+        driverMarkers.set(d.id, m);
+      }
+      m.setLatLng([d.lat, d.lng]);
+      m.setStyle({ fillColor: COLORS[d.state] || '#999' });
+      m.unbindTooltip();
+      m.bindTooltip(text(d.id + ' - ' + d.state + (d.tripId ? ' (' + d.tripId.slice(0, 8) + ')' : '')));
+    }
+    for (const [id, m] of driverMarkers) {
+      if (!seen.has(id)) { map.removeLayer(m); driverMarkers.delete(id); }
+    }
+    for (const k of Object.keys(counts)) {
+      document.getElementById('c-' + k).textContent = counts[k];
+    }
+  }
+
+  function renderTrips(trips, driversById) {
+    tripLayer.clearLayers();
+    for (const t of trips) {
+      const pickup = [t.pickupLat, t.pickupLng];
+      const drop = [t.dropoffLat, t.dropoffLng];
+      if (t.status === 'REQUESTED') {
+        L.circleMarker(pickup, { radius: 5, color: '#d63031', fillColor: '#d63031', fillOpacity: 1 })
+          .bindTooltip(text('rider ' + t.riderId + ' waiting (attempts: ' + t.matchAttempts + ')'))
+          .addTo(tripLayer);
+        continue;
+      }
+      const d = driversById.get(t.driverId);
+      if ((t.status === 'MATCHED' || t.status === 'DRIVER_ARRIVING') && d) {
+        L.polyline([[d.lat, d.lng], pickup], { color: '#2c6fd1', dashArray: '4 6', weight: 2 }).addTo(tripLayer);
+        L.circleMarker(pickup, { radius: 4, color: '#2c6fd1' }).addTo(tripLayer);
+      } else if (t.status === 'IN_PROGRESS') {
+        L.polyline([d ? [d.lat, d.lng] : pickup, drop], { color: '#2c6fd1', weight: 3 }).addTo(tripLayer);
+        L.circleMarker(drop, { radius: 4, color: '#555' }).addTo(tripLayer);
+      }
+    }
+  }
+
+  function renderCounts(counts) {
+    const table = document.getElementById('counts');
+    table.replaceChildren();
+    for (const [status, n] of Object.entries(counts)) {
+      const row = table.insertRow();
+      row.insertCell().textContent = status;
+      row.insertCell().textContent = n;
+    }
+  }
+
+  function trackChanges(trips) {
+    for (const t of trips) {
+      const prev = lastStatus.get(t.id);
+      if (prev !== t.status) {
+        lastStatus.set(t.id, t.status);
+        let msg = 'trip ' + t.id.slice(0, 8) + ' ' + t.status;
+        if (t.driverId) msg += ' driver ' + t.driverId;
+        if (t.cancelReason) msg += ' (' + t.cancelReason + ')';
+        logLine(msg);
+      }
+    }
+  }
+
+  async function refresh() {
+    try {
+      const res = await fetch('/api/map/state');
+      const state = await res.json();
+      renderDrivers(state.drivers);
+      const byId = new Map(state.drivers.map(d => [d.id, d]));
+      renderTrips(state.activeTrips, byId);
+      renderCounts(state.tripCounts);
+      trackChanges(state.activeTrips.concat(state.recentlyFinished));
+    } catch (e) {
+      console.error('refresh failed', e);
+    } finally {
+      setTimeout(refresh, 1000);
+    }
+  }
+  refresh();
+</script>
+</body>
+</html>

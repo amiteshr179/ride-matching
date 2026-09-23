@@ -81,6 +81,27 @@ public class DriverLocationService {
         return out;
     }
 
+    public record DriverPosition(String driverId, GeoPoint location) {
+    }
+
+    /** Every driver who pinged recently, for the live map. */
+    public List<DriverPosition> freshDrivers() {
+        var ids = redis.opsForZSet().rangeByScore(RedisKeys.DRIVERS_SEEN, freshCutoff(), Double.POSITIVE_INFINITY);
+        if (ids == null || ids.isEmpty()) {
+            return List.of();
+        }
+        List<String> idList = new ArrayList<>(ids);
+        List<Point> points = redis.opsForGeo().position(RedisKeys.DRIVERS_GEO, idList.toArray(String[]::new));
+        List<DriverPosition> out = new ArrayList<>(idList.size());
+        for (int i = 0; i < idList.size(); i++) {
+            Point p = points == null ? null : points.get(i);
+            if (p != null) {
+                out.add(new DriverPosition(idList.get(i), new GeoPoint(p.getY(), p.getX())));
+            }
+        }
+        return out;
+    }
+
     public GeoPoint locationOf(String driverId) {
         List<Point> pos = redis.opsForGeo().position(RedisKeys.DRIVERS_GEO, driverId);
         if (pos == null || pos.isEmpty() || pos.get(0) == null) {
