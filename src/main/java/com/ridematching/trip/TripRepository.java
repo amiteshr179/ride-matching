@@ -21,17 +21,16 @@ public interface TripRepository extends JpaRepository<Trip, UUID> {
     Optional<Trip> findByIdForUpdate(@Param("id") UUID id);
 
     /**
-     * Trips waiting for a matching round. SKIP LOCKED lets several app
-     * instances poll the same table without working on the same trip.
+     * Trips waiting for a matching round. No lock here; each round takes a
+     * row lock and re-checks, so two pollers can not both act on one trip.
      */
     @Query(value = """
             select id from trips
             where status = 'REQUESTED' and next_match_at <= :now
             order by next_match_at
             limit :limit
-            for update skip locked
             """, nativeQuery = true)
-    List<UUID> lockTripsDueForMatching(@Param("now") Instant now, @Param("limit") int limit);
+    List<UUID> findTripIdsDueForMatching(@Param("now") Instant now, @Param("limit") int limit);
 
     List<Trip> findByStatusIn(Collection<TripStatus> statuses);
 }
