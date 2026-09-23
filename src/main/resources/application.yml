@@ -16,6 +16,21 @@ spring:
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP:localhost:9092}
 
+rides:
+  drivers:
+    stale-after: 15s
+    sweep-interval: 5s
+  matching:
+    radii-km: [1.0, 2.0, 4.0, 8.0]
+    candidates-per-radius: 10
+    offer-timeout: 10s
+    max-attempts: 10
+    retry-delay: 3s
+    poll-interval: 500ms
+  eta:
+    avg-speed-kmh: 25
+    detour-factor: 1.3
+
 management:
   endpoints:
     web:
