@@ -141,6 +141,28 @@ class DriverAssignmentsRedisTest {
     }
 
     @Test
+    void availableSetFollowsReservationsAndPings() {
+        UUID trip = UUID.randomUUID();
+        assertThat(isAvailable("d-1")).isTrue();
+
+        assignments.reserve("d-1", trip, Duration.ofSeconds(30));
+        assertThat(isAvailable("d-1")).isFalse();
+
+        // A ping while busy must not put the driver back.
+        locations.updateLocation("d-1", new GeoPoint(17.386, 78.4867));
+        assertThat(isAvailable("d-1")).isFalse();
+
+        assignments.release("d-1", trip);
+        assertThat(isAvailable("d-1")).isTrue();
+        assertThat(locations.findNearby(new GeoPoint(17.385, 78.4867), 1, 10))
+                .extracting(NearbyDriver::driverId).containsExactly("d-1");
+    }
+
+    private boolean isAvailable(String driverId) {
+        return redis.opsForZSet().score(RedisKeys.DRIVERS_AVAILABLE, driverId) != null;
+    }
+
+    @Test
     void sweeperRemovesOnlyStaleDrivers() {
         Clock later = Clock.fixed(Instant.now().plusSeconds(20), ZoneOffset.UTC);
         locations.updateLocation("d-2", new GeoPoint(17.39, 78.49));

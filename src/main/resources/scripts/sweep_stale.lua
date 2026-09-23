@@ -1,4 +1,4 @@
--- KEYS[1] = drivers:geo, KEYS[2] = drivers:seen
+-- KEYS[1] = drivers:geo, KEYS[2] = drivers:seen, KEYS[3] = drivers:available
 -- ARGV[1] = cutoff (epoch ms), ARGV[2] = max drivers to remove per call
 -- Redis GEO members cannot have their own TTL, so a sorted set of
 -- last-seen timestamps tells us who went quiet. Doing the read and the
@@ -10,4 +10,5 @@ if #ids == 0 then
 end
 redis.call('ZREM', KEYS[2], unpack(ids))
 redis.call('ZREM', KEYS[1], unpack(ids))
+redis.call('ZREM', KEYS[3], unpack(ids))
 return #ids

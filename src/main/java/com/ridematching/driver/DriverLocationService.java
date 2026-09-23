@@ -42,19 +42,21 @@ public class DriverLocationService {
     }
 
     public void updateLocation(String driverId, GeoPoint point) {
-        redis.execute(updateScript, List.of(RedisKeys.DRIVERS_GEO, RedisKeys.DRIVERS_SEEN),
+        redis.execute(updateScript,
+                List.of(RedisKeys.DRIVERS_GEO, RedisKeys.DRIVERS_SEEN, RedisKeys.DRIVERS_AVAILABLE,
+                        RedisKeys.assignment(driverId)),
                 driverId, Double.toString(point.lng()), Double.toString(point.lat()),
                 Long.toString(clock.millis()));
     }
 
     /**
-     * Drivers within the radius, nearest first. Drivers whose last ping is
-     * older than the stale window are skipped even if the sweeper has not
-     * removed them yet.
+     * Available drivers within the radius, nearest first. Drivers whose last
+     * ping is older than the stale window are skipped even if the sweeper
+     * has not removed them yet.
      */
     public List<NearbyDriver> findNearby(GeoPoint center, double radiusKm, int limit) {
         var results = redis.opsForGeo().search(
-                RedisKeys.DRIVERS_GEO,
+                RedisKeys.DRIVERS_AVAILABLE,
                 GeoReference.fromCoordinate(center.lng(), center.lat()),
                 new Distance(radiusKm, Metrics.KILOMETERS),
                 GeoSearchCommandArgs.newGeoSearchArgs().includeCoordinates().includeDistance().sortAscending().limit(limit));
@@ -121,7 +123,8 @@ public class DriverLocationService {
 
     @Scheduled(fixedDelayString = "${rides.drivers.sweep-interval}")
     public void sweepStaleDrivers() {
-        Long removed = redis.execute(sweepScript, List.of(RedisKeys.DRIVERS_GEO, RedisKeys.DRIVERS_SEEN),
+        Long removed = redis.execute(sweepScript,
+                List.of(RedisKeys.DRIVERS_GEO, RedisKeys.DRIVERS_SEEN, RedisKeys.DRIVERS_AVAILABLE),
                 Long.toString(freshCutoff()), Integer.toString(SWEEP_BATCH));
         if (removed != null && removed > 0) {
             log.info("Removed {} stale drivers", removed);

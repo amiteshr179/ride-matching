@@ -38,7 +38,7 @@ public class DriverAssignments {
 
     public ReserveResult reserve(String driverId, UUID tripId, Duration ttl) {
         Long r = redis.execute(reserveScript,
-                List.of(RedisKeys.assignment(driverId), RedisKeys.DRIVERS_SEEN),
+                List.of(RedisKeys.assignment(driverId), RedisKeys.DRIVERS_SEEN, RedisKeys.DRIVERS_AVAILABLE),
                 driverId, tripId.toString(), Long.toString(ttl.toMillis()),
                 Long.toString(locations.freshCutoff()));
         if (r == null) {
@@ -57,7 +57,9 @@ public class DriverAssignments {
     }
 
     public boolean release(String driverId, UUID tripId) {
-        Long r = redis.execute(releaseScript, List.of(RedisKeys.assignment(driverId)), tripId.toString());
+        Long r = redis.execute(releaseScript,
+                List.of(RedisKeys.assignment(driverId), RedisKeys.DRIVERS_GEO, RedisKeys.DRIVERS_AVAILABLE),
+                tripId.toString(), driverId);
         return r != null && r == 1;
     }
 

@@ -1,5 +1,6 @@
 package com.ridematching;
 
+import com.ridematching.driver.DriverAssignments;
 import com.ridematching.trip.Trip;
 import com.ridematching.trip.TripRepository;
 import com.ridematching.trip.TripStatus;
@@ -65,6 +66,8 @@ class RideFlowIntegrationTest {
     JdbcClient jdbc;
     @Autowired
     TripRepository trips;
+    @Autowired
+    DriverAssignments assignments;
 
     private final HttpClient http = HttpClient.newHttpClient();
 
@@ -215,6 +218,21 @@ class RideFlowIntegrationTest {
 
         assertThat(redis.hasKey("driver:cancel-driver:assignment")).isFalse();
         assertThat(get("/api/drivers/cancel-driver/offer").status()).isEqualTo(204);
+    }
+
+    @Test
+    void freeDriverBehindManyBusyDriversIsStillFound() {
+        // 12 busy drivers packed around the pickup, more than candidates-per-radius.
+        for (int i = 0; i < 12; i++) {
+            ping("busy-" + i, pickupLat + 0.0005 + i * 0.0001);
+            assertThat(assignments.reserve("busy-" + i, UUID.randomUUID(), Duration.ofMinutes(5)))
+                    .isEqualTo(DriverAssignments.ReserveResult.RESERVED);
+        }
+        ping("free-but-further", pickupLat + 0.005);
+
+        String tripId = requestRide("crowded-rider", UUID.randomUUID().toString()).body().get("id").asString();
+
+        awaitOfferFor("free-but-further", tripId);
     }
 
     @Test
